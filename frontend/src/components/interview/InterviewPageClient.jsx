@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DOMAINS } from '../../lib/constants';
 import { Mic, MicOff, PhoneOff, Clock, User, Bot, Loader2 } from 'lucide-react';
+import { apiPost } from '../../services/api';
 
 // How many waveform bars to show in the visualizer
 const WAVEFORM_BAR_COUNT = 14;
@@ -81,12 +82,7 @@ export default function InterviewPageClient({
 
     // Persist the new entry to our backend (non-fatal if it fails)
     try {
-      await fetch('/api/transcript', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ interviewId, entry: newEntry }),
-      });
+      await apiPost('/transcript', { interviewId, entry: newEntry });
     } catch {
       // Transcript is still in memory (transcriptRef), so feedback will still work
     }
@@ -115,17 +111,12 @@ export default function InterviewPageClient({
 
     // Send all the interview data to our backend to generate AI feedback
     try {
-      await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          interviewId,
-          userId,
-          domainLabel: domain?.label,
-          difficulty,
-          transcript: finalTranscript,
-        }),
+      await apiPost('/feedback', {
+        interviewId,
+        userId,
+        domainLabel: domain?.label,
+        difficulty,
+        transcript: finalTranscript,
       });
     } catch (error) {
       console.error('Feedback generation failed:', error);

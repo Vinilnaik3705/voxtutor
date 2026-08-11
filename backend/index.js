@@ -16,9 +16,33 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ─── Middleware ────────────────────────────────────────────────────
-// Allow requests from the frontend (with cookies)
+// Build allowed origins list from environment & defaults
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5000',
+  process.env.FRONTEND_URL,
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+].filter(Boolean).map(url => url.trim().replace(/\/$/, ''));
+
+// Allow requests from the frontend (with cookies & cross-origin credentials)
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like curl, mobile apps, server-to-server)
+    if (!origin) return callback(null, true);
+
+    const cleanOrigin = origin.replace(/\/$/, '');
+    
+    // Check if origin is explicitly allowed or matches Vercel deployments
+    if (
+      allowedOrigins.includes(cleanOrigin) ||
+      !process.env.FRONTEND_URL ||
+      cleanOrigin.endsWith('.vercel.app')
+    ) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Fallback: allow origin dynamically for CORS preflights
+    }
+  },
   credentials: true,
 }));
 

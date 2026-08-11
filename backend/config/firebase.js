@@ -29,8 +29,11 @@ function getAdminApp() {
       credential: cert({
         projectId:   process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        // Private keys in .env have literal \n characters — replace them with real newlines
-        privateKey: (process.env.FIREBASE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
+        // Private keys in env variables may be wrapped in quotes or have literal \n characters
+        privateKey: (process.env.FIREBASE_PRIVATE_KEY ?? '')
+          .trim()
+          .replace(/^["']|["']$/g, '')
+          .replace(/\\n/g, '\n'),
       }),
     },
     'admin' // Name this app "admin" to avoid conflicts

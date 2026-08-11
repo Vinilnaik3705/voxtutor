@@ -2,28 +2,35 @@ import { adminAuth } from '../config/firebase.js';
 import User from '../models/User.js';
 
 /**
+ * Helper to determine cookie security settings for cross-domain / production setups
+ */
+function getCookieOptions(req) {
+  const isSecure = process.env.NODE_ENV === 'production' || req.secure || req.headers['x-forwarded-proto'] === 'https';
+  return {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: isSecure ? 'none' : 'lax',
+    path: '/',
+  };
+}
+
+/**
  * POST /api/auth/session
  * Logs a user in by exchanging their Firebase ID token for a secure session cookie.
  */
 export async function createSession(req, res) {
   try {
-    // 1. Get the temporary ID token sent from the frontend login
     const { idToken } = req.body;
-    
-    // 2. Set the cookie to expire in 7 days
-    const expiresIn = 60 * 60 * 24 * 7 * 1000; 
-    
-    // 3. Ask Firebase Admin to create a secure session cookie
+    const expiresIn = 60 * 60 * 24 * 7 * 1000; // 7 days
+
     const sessionCookie = await adminAuth().createSessionCookie(idToken, { expiresIn });
 
-    // 4. Attach the cookie to the HTTP response
-    res.cookie('voxtutor-session', sessionCookie, {
+    const cookieOpts = {
+      ...getCookieOptions(req),
       maxAge: expiresIn,
-      httpOnly: true, // Prevents JavaScript from reading the cookie (security)
-      secure: process.env.NODE_ENV === 'production', // Only over HTTPS in prod
-      sameSite: 'lax',
-      path: '/',
-    });
+    };
+
+    res.cookie('voxtutor-session', sessionCookie, cookieOpts);
 
     return res.json({ ok: true });
   } catch (err) {
@@ -37,57 +44,72 @@ export async function createSession(req, res) {
  * Logs a user out by deleting their session cookie.
  */
 export async function revokeSession(req, res) {
-  // 1. Tell the browser to delete the session cookie
-  res.clearCookie('voxtutor-session', { path: '/' });
+  res.clearCookie('voxtutor-session', getCookieOptions(req));
   return res.json({ ok: true });
 }
 
 /**
  * GET /api/auth/me
- * Checks if the user is currently logged in, and returns their profile if they are.
+ * Checks if the user is currently logged in via session cookie OR Bearer token.
  */
 export async function getCurrentUser(req, res) {
-  // 1. Check if the browser sent a session cookie
-  const session = req.cookies['voxtutor-session'];
-  
-  if (!session) {
-    // No cookie = not logged in
+  const sessionCookie = req.cookies['voxtutor-session'];
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+  if (!sessionCookie && !bearerToken) {
     return res.json({ user: null });
   }
 
   try {
-    // 2. Ask Firebase Admin to verify the cookie is authentic and not expired
-    const decoded = await adminAuth().verifySessionCookie(session, true);
-    
-    // 3. Find the user's profile in our MongoDB database
-    const user = await User.findOne({ uid: decoded.uid }).lean();
-    
-    if (!user) {
+    let uid = null;
+
+    if (sessionCookie) {
+      try {
+        const decoded = await adminAuth().verifySessionCookie(sessionCookie, true);
+        uid = decoded.uid;
+      } catch {
+        // session cookie expired or invalid, fallback to bearer token
+      }
+    }
+
+    if (!uid && bearerToken) {
+      try {
+        const decoded = await adminAuth().verifyIdToken(bearerToken);
+        uid = decoded.uid;
+      } catch {
+        try {
+          const decoded = await adminAuth().verifySessionCookie(bearerToken, true);
+          uid = decoded.uid;
+        } catch {
+          // both failed
+        }
+      }
+    }
+
+    if (!uid) {
       return res.json({ user: null });
     }
-    
-    // 4. Return the user profile to the frontend
-    return res.json({ user });
+
+    const user = await User.findOne({ uid }).lean();
+    return res.json({ user: user || null });
   } catch {
-    // If the cookie is invalid or expired, return null
     return res.json({ user: null });
   }
 }
 
 /**
  * POST /api/auth/upsert-user
- * Creates a new user in the database, or updates an existing user's profile picture/name.
+ * Creates a new user in the database, or updates an existing user's profile.
  */
 export async function upsertUser(req, res) {
   try {
-    // 1. Extract the user details from the request
     const { uid, name, email, photoURL } = req.body;
 
-    // 2. Find by 'uid', update if exists, insert if new (upsert)
     const user = await User.findOneAndUpdate(
-      { uid: uid }, // Find condition
-      { uid, name, email, photoURL: photoURL || '' }, // Data to update
-      { upsert: true, new: true, setDefaultsOnInsert: true } // Options
+      { uid },
+      { uid, name, email, photoURL: photoURL || '' },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
     return res.json({ ok: true, user });

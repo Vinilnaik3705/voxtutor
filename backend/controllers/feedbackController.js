@@ -66,7 +66,7 @@ Analyze the candidate's performance and return ONLY valid JSON matching this str
 
     // 4. Call Gemini AI, enforcing a strict JSON response
     const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
       contents: prompt,
       config: { 
         responseMimeType: 'application/json' 
