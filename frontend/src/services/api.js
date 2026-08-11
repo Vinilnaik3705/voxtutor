@@ -4,10 +4,15 @@ import { auth } from '../config/firebase';
  * api.js — Centralized helper for all HTTP requests to our backend.
  *
  * Automatically resolves production backend URL from VITE_API_URL / VITE_BACKEND_URL,
- * sends session cookies (credentials: 'include'), and attaches Bearer tokens if signed in.
+ * defaulting to https://voxtutor.onrender.com in production builds.
  */
 
-const rawBase = (import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '').trim().replace(/\/$/, '');
+const rawBase = (
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_BACKEND_URL ||
+  (import.meta.env.PROD ? 'https://voxtutor.onrender.com' : '')
+).trim().replace(/\/$/, '');
+
 export const API_BASE = rawBase ? (rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`) : '/api';
 
 /**
