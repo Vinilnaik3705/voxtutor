@@ -53,6 +53,15 @@ app.use(cookieParser());
 app.use(express.json());
 
 // ─── Routes ────────────────────────────────────────────────────────
+// Root welcome route
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'VoxTutor Backend API is running successfully!',
+    health: '/api/health',
+  });
+});
+
 app.use('/api/auth',          authRoutes);
 app.use('/api/interviews',    interviewRoutes);
 app.use('/api/feedback',      feedbackRoutes);
